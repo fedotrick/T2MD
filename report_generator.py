@@ -11,6 +11,122 @@ import calendar
 import re
 from kivy.core.window import Window
 from kivy.uix.widget import Widget
+from kivy.lang import Builder
+from typing import Dict, List, Optional
+
+# После импортов и перед Builder.load_string добавим:
+
+class StyledButton(Button):
+    """Базовый класс для стилизованных кнопок с улучшенным внешним видом"""
+    pass
+
+class StyledSpinner(Spinner):
+    """Базовый класс для стилизованных выпадающих списков"""
+    pass
+
+class StyledLabel(Label):
+    """Базовый класс для стилизованных текстовых меток"""
+    pass
+
+class SectionLabel(Label):
+    """Базовый класс для заголовков секций с особым форматированием"""
+    pass
+
+# Определяем стили в KV language
+Builder.load_string('''
+<StyledTextInput@TextInput>:
+    background_color: (0.95, 0.95, 0.95, 1)
+    foreground_color: (0.2, 0.2, 0.2, 1)
+    cursor_color: (0.2, 0.6, 0.8, 1)
+    font_size: '16sp'
+    padding: [10, 10, 10, 10]
+    size_hint_y: None
+    height: 45
+    canvas.before:
+        Color:
+            rgba: (0.8, 0.8, 0.8, 1)
+        Line:
+            rectangle: self.x, self.y, self.width, self.height
+            width: 1.5
+
+<StyledButton@Button>:
+    background_color: (0.2, 0.6, 0.8, 1)
+    color: (1, 1, 1, 1)
+    size_hint_y: None
+    height: 45
+    font_size: '16sp'
+    canvas.before:
+        Color:
+            rgba: (0.165, 0.494, 0.657, 1) if self.state == 'normal' else (0.145, 0.435, 0.580, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [5,]
+
+<StyledSpinner@Spinner>:
+    background_color: (0.9, 0.9, 0.9, 1)
+    color: (0.2, 0.2, 0.2, 1)
+    size_hint_y: None
+    height: 45
+    font_size: '16sp'
+    canvas.before:
+        Color:
+            rgba: (0.8, 0.8, 0.8, 1)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [5,]
+
+<StyledLabel@Label>:
+    color: (0.2, 0.2, 0.2, 1)  # Тёмный текст для контраста
+    font_size: '16sp'
+    bold: True
+    size_hint_y: None
+    height: 35
+    text_size: self.size
+    halign: 'left'
+    valign: 'middle'
+    canvas.before:
+        Color:
+            rgba: (0.9, 0.9, 0.9, 1)  # Светло-серый фон для метки
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<SectionLabel@Label>:
+    color: (0.2, 0.6, 0.8, 1)  # Голубой цвет для заголовков секций
+    font_size: '18sp'
+    bold: True
+    size_hint_y: None
+    height: 45
+    canvas.before:
+        Color:
+            rgba: (0.95, 0.95, 0.95, 1)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<ReportGenerator>:
+    canvas.before:
+        Color:
+            rgba: (1, 1, 1, 1)  # Белый фон
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    
+    BoxLayout:
+        orientation: 'vertical'
+        padding: [30, 30, 30, 30]
+        spacing: 20
+
+        Label:
+            text: 'ГЕНЕРАТОР ОТЧЕТОВ ТЕРМООБРАБОТКИ'
+            font_size: '20sp'
+            bold: True
+            color: (0.2, 0.6, 0.8, 1)
+            size_hint_y: None
+            height: 50
+''')
 
 class FocusableWidget:
     """Миксин для добавления навигации по полям"""
@@ -49,16 +165,37 @@ class FocusableTextInput(TextInput, FocusableWidget):
             return True
         return super().keyboard_on_key_down(window, keycode, text, modifiers)
 
-class TimeInput(FocusableTextInput):
+class StyledFocusableTextInput(FocusableTextInput):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.multiline = False
+        self.background_color = (0.95, 0.95, 0.95, 1)
+        self.foreground_color = (0.2, 0.2, 0.2, 1)
+        self.cursor_color = (0.2, 0.6, 0.8, 1)
+        self.font_size = '16sp'
+        self.padding = [10, 10, 10, 10]
+        self.size_hint_y = None
+        self.height = 45
+
+class TimeInput(StyledFocusableTextInput):
+    """
+    Специализированное поле для ввода времени.
+    Обеспечивает:
+    - Автоматическое форматирование в формат ЧЧ:ММ
+    - Валидацию вводимых значений
+    - Ограничение часов (0-23) и минут (0-59)
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.hint_text = 'ЧЧ:ММ'
         self.input_type = 'number'
         self.last_value = ''
         self.bind(text=self.on_text)
 
     def insert_text(self, substring, from_undo=False):
+        """
+        Обработка ввода текста с автоматическим форматированием.
+        Добавляет двоеточие после ввода часов и проверяет корректность значений.
+        """
         # Проверяем, что вводятся только цифры
         if not substring.isdigit():
             return
@@ -104,6 +241,14 @@ class TimeInput(FocusableTextInput):
                 pass
 
 class CalendarWidget(GridLayout):
+    """
+    Виджет календаря для выбора даты.
+    Возможности:
+    - Отображение текущего месяца
+    - Навигация по месяцам
+    - Выделение текущей даты
+    - Выбор даты кликом
+    """
     def __init__(self, callback, **kwargs):
         super().__init__(**kwargs)
         self.cols = 7
@@ -144,7 +289,7 @@ class CalendarWidget(GridLayout):
         self.add_widget(self.main_layout)
 
     def get_month_year_text(self):
-        """Возвращает текст с названием месяца и годом"""
+        """Форматирует текст с названием месяца и годом"""
         months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
                  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
         return f"{months[self.current_date.month - 1]} {self.current_date.year}"
@@ -201,45 +346,73 @@ class CalendarWidget(GridLayout):
         date = f"{day:02d}.{self.current_date.month:02d}.{self.current_date.year}"
         self.callback(date)
 
+# В начале файла добавим константы
+NORMS = {
+    'Печь 1': {
+        'цикл1': 510,  # 8:30 (в минутах)
+        'цикл2': 210,  # 3:30
+        'перерыв': 40,  # 0:40
+        'общее': 760   # 12:40
+    },
+    'Печь 2': {
+        'цикл1': 660,  # 11:00
+        'цикл2': 210,  # 3:30
+        'перерыв': 40,  # 0:40
+        'общее': 910   # 15:10
+    }
+}
+
+MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+          'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+
 class ReportGenerator(BoxLayout):
+    """
+    Основной класс генератора отчетов.
+    Функциональность:
+    - Ввод даты через календарь
+    - Выбор печи
+    - Ввод времени для двух программ
+    - Расчет отклонений от нормативов
+    - Генерация отчета в формате Markdown
+    """
     def __init__(self, **kwargs):
+        """Инициализация интерфейса и всех компонентов формы"""
         super().__init__(**kwargs)
         self.orientation = 'vertical'
-        self.padding = 10
-        self.spacing = 10
+        self.padding = 30
+        self.spacing = 20
+        
+        # Создаем основной контейнер с белым фоном и тенью
+        main_container = BoxLayout(
+            orientation='vertical',
+            padding=30,
+            spacing=20,
+            size_hint_y=None
+        )
+        main_container.bind(minimum_height=main_container.setter('height'))
         
         # Нормативные значения (в минутах) для каждой печи
-        self.norms = {
-            'Печь 1': {
-                'цикл1': 510,  # 8:30
-                'цикл2': 210,  # 3:30
-                'перерыв': 40,  # 0:40
-                'общее': 760   # 12:40
-            },
-            'Печь 2': {
-                'цикл1': 660,  # 11:00
-                'цикл2': 210,  # 3:30
-                'перерыв': 40,  # 0:40
-                'общее': 910   # 15:10
-            }
-        }
+        self.norms = NORMS
 
         # Создаем список всех полей ввода в порядке навигации
         self.input_fields = []
         
         # Дата с календарем
         date_layout = BoxLayout(size_hint_y=None, height=40)
-        self.date_input = FocusableTextInput(
+        self.date_input = StyledFocusableTextInput(
             hint_text='Дата (дд.мм.гггг)',
             multiline=False
         )
-        date_button = Button(
+        date_button = StyledButton(
             text='📅',
             size_hint_x=None,
             width=40
         )
         date_button.bind(on_press=self.show_calendar)
-        date_layout.add_widget(Label(text='Дата:', size_hint_x=0.3))
+        date_layout.add_widget(StyledLabel(
+            text='Дата:',
+            size_hint_x=0.3
+        ))
         date_layout.add_widget(self.date_input)
         date_layout.add_widget(date_button)
         self.add_widget(date_layout)
@@ -247,52 +420,68 @@ class ReportGenerator(BoxLayout):
         
         # Номер печи
         furnace_layout = BoxLayout(size_hint_y=None, height=40)
-        self.furnace_spinner = Spinner(
+        self.furnace_spinner = StyledSpinner(
             text='Печь 1',
             values=('Печь 1', 'Печь 2'),
             size_hint_x=0.7
         )
-        furnace_layout.add_widget(Label(text='Печь:', size_hint_x=0.3))
+        furnace_layout.add_widget(StyledLabel(
+            text='Печь:',
+            size_hint_x=0.3
+        ))
         furnace_layout.add_widget(self.furnace_spinner)
         self.add_widget(furnace_layout)
+        self.input_fields.append(self.furnace_spinner)
 
         # Программа 1
-        self.add_widget(Label(text='Программа 1'))
+        self.add_widget(SectionLabel(text='Программа 1'))
         
         prog1_start_layout = BoxLayout(size_hint_y=None, height=40)
         self.prog1_start = TimeInput()
-        prog1_start_layout.add_widget(Label(text='Время включения:', size_hint_x=0.3))
+        prog1_start_layout.add_widget(StyledLabel(
+            text='Время включения:',
+            size_hint_x=0.3
+        ))
         prog1_start_layout.add_widget(self.prog1_start)
         self.add_widget(prog1_start_layout)
         self.input_fields.append(self.prog1_start)
 
         prog1_end_layout = BoxLayout(size_hint_y=None, height=40)
         self.prog1_end = TimeInput()
-        prog1_end_layout.add_widget(Label(text='Время выключения:', size_hint_x=0.3))
+        prog1_end_layout.add_widget(StyledLabel(
+            text='Время выключения:',
+            size_hint_x=0.3
+        ))
         prog1_end_layout.add_widget(self.prog1_end)
         self.add_widget(prog1_end_layout)
         self.input_fields.append(self.prog1_end)
 
         # Программа 2
-        self.add_widget(Label(text='Программа 2'))
+        self.add_widget(SectionLabel(text='Программа 2'))
         
         prog2_start_layout = BoxLayout(size_hint_y=None, height=40)
         self.prog2_start = TimeInput()
-        prog2_start_layout.add_widget(Label(text='Время включения:', size_hint_x=0.3))
+        prog2_start_layout.add_widget(StyledLabel(
+            text='Время включения:',
+            size_hint_x=0.3
+        ))
         prog2_start_layout.add_widget(self.prog2_start)
         self.add_widget(prog2_start_layout)
         self.input_fields.append(self.prog2_start)
 
         prog2_end_layout = BoxLayout(size_hint_y=None, height=40)
         self.prog2_end = TimeInput()
-        prog2_end_layout.add_widget(Label(text='Время выключения:', size_hint_x=0.3))
+        prog2_end_layout.add_widget(StyledLabel(
+            text='Время выключения:',
+            size_hint_x=0.3
+        ))
         prog2_end_layout.add_widget(self.prog2_end)
         self.add_widget(prog2_end_layout)
         self.input_fields.append(self.prog2_end)
 
         # Добавляем поле для уведомлений
-        self.add_widget(Label(text='Уведомления'))
-        self.notifications_input = FocusableTextInput(
+        self.add_widget(SectionLabel(text='Уведомления'))
+        self.notifications_input = StyledFocusableTextInput(
             hint_text='Введите уведомления',
             multiline=True,
             size_hint_y=None,
@@ -302,22 +491,24 @@ class ReportGenerator(BoxLayout):
         self.input_fields.append(self.notifications_input)
 
         # Привязываем обработчики событий навигации
-        for i, field in enumerate(self.input_fields):
-            field.bind(
-                on_up=lambda x, idx=i: self.focus_previous_field(idx),
-                on_down=lambda x, idx=i: self.focus_next_field(idx)
-            )
+        self.bind_navigation()
 
-        # Кнопка генерации отчета
-        self.add_widget(Button(
-            text='Сгенерировать отчет',
+        # Обновляем кнопку генерации отчета
+        generate_button = StyledButton(
+            text='СГЕНЕРИРОВАТЬ ОТЧЕТ',
             size_hint_y=None,
             height=50,
-            on_press=self.generate_report
-        ))
+            font_size='18sp',
+            bold=True
+        )
+        generate_button.bind(on_press=self.generate_report)
+        self.add_widget(generate_button)
 
     def calculate_time_difference(self, start_time, end_time):
-        """Вычисляет разницу между временем начала и конца"""
+        """
+        Вычисляет разницу между временем начала и конца в минутах.
+        Учитывает переход через полночь.
+        """
         start = datetime.strptime(start_time, '%H:%M')
         end = datetime.strptime(end_time, '%H:%M')
         
@@ -328,25 +519,35 @@ class ReportGenerator(BoxLayout):
         return diff.seconds // 60  # возвращаем разницу в минутах
 
     def calculate_deviation(self, actual, norm):
-        """Вычисляет отклонение от нормы в процентах"""
+        """
+        Вычисляет процентное отклонение от нормы.
+        Положительное значение - превышение нормы
+        Отрицательное значение - меньше нормы
+        """
         deviation = ((actual - norm) / norm) * 100
         return deviation
 
     def format_time(self, minutes):
         """Форматирует минуты в строку ЧЧ:ММ"""
-        hours = minutes // 60
-        mins = minutes % 60
-        return f"{hours:02d}:{mins:02d}"
+        try:
+            hours, mins = divmod(minutes, 60)
+            return f"{int(hours):02d}:{int(mins):02d}"
+        except (TypeError, ValueError):
+            return "00:00"
 
     def show_calendar(self, instance):
-        content = CalendarWidget(callback=self.on_date_select)
-        self.calendar_popup = Popup(
-            title='Выберите дату',
-            content=content,
-            size_hint=(None, None),
-            size=(400, 400)
-        )
-        self.calendar_popup.open()
+        """Показывает календарь для выбора даты"""
+        try:
+            content = CalendarWidget(callback=self.on_date_select)
+            self.calendar_popup = Popup(
+                title='Выберите дату',
+                content=content,
+                size_hint=(None, None),
+                size=(400, 400)
+            )
+            self.calendar_popup.open()
+        except Exception as e:
+            self.show_error_popup(f"Ошибка при открытии календаря: {str(e)}")
 
     def on_date_select(self, date):
         self.date_input.text = date
@@ -369,7 +570,28 @@ class ReportGenerator(BoxLayout):
         self.furnace_spinner.text = 'Печь 1'
 
     def generate_report(self, instance):
+        """
+        Основной метод генерации отчета.
+        Выполняет:
+        1. Проверку заполнения всех полей
+        2. Расчет времени этапов и отклонений
+        3. Формирование отчета по шаблону
+        4. Сохранение в файл
+        5. Очистку полей после успешной генерации
+        """
         try:
+            # Проверка заполнения всех полей
+            if not all([self.date_input.text, self.prog1_start.text, self.prog1_end.text,
+                       self.prog2_start.text, self.prog2_end.text]):
+                raise ValueError("Пожалуйста, заполните все поля времени")
+
+            # Проверка формата времени
+            time_fields = [self.prog1_start.text, self.prog1_end.text,
+                          self.prog2_start.text, self.prog2_end.text]
+            for field in time_fields:
+                if not re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', field):
+                    raise ValueError("Неверный формат времени. Используйте ЧЧ:ММ")
+
             # Получаем нормативы для выбранной печи
             current_norms = self.norms[self.furnace_spinner.text]
             
@@ -410,7 +632,7 @@ class ReportGenerator(BoxLayout):
 
             # Формируем отчет
             report_template = f"""🔥 **ИНФОРМАЦИЯ ПО ТЕРМООБРАБОТКЕ** 🔥  
-                    **за** 📅 **{self.date_input.text}**  
+                    **за**  **{self.date_input.text}**  
 🏭 **Литейный цех | Ответственный: Федотов А.А.**
 ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬  
 🔘 **{self.furnace_spinner.text}** | 📶 **Статус: Активна**
@@ -440,23 +662,12 @@ class ReportGenerator(BoxLayout):
             self.clear_fields()
             
             # Показываем сообщение об успешной генерации
-            popup = Popup(
-                title='Успех',
-                content=Label(text='Отчет успешно сгенерирован'),
-                size_hint=(None, None),
-                size=(300, 150)
-            )
-            popup.open()
+            self.show_success_popup()
 
+        except ValueError as ve:
+            self.show_error_popup(str(ve))
         except Exception as e:
-            # Показываем сообщение об ошибке
-            popup = Popup(
-                title='Ошибка',
-                content=Label(text=f'Ошибка при генерации отчета:\n{str(e)}'),
-                size_hint=(None, None),
-                size=(400, 200)
-            )
-            popup.open()
+            self.show_error_popup(f"Неожиданная ошибка: {str(e)}")
 
     def get_deviation_symbol(self, deviation):
         """Возвращает символ отклонения в зависимости от значения"""
@@ -466,8 +677,45 @@ class ReportGenerator(BoxLayout):
             return "🔻"
         return "❎"
 
+    def show_error_popup(self, message):
+        """Показывает всплывающее окно с ошибкой"""
+        popup = Popup(
+            title='Ошибка',
+            content=Label(text=message),
+            size_hint=(None, None),
+            size=(400, 200)
+        )
+        popup.open()
+
+    def show_success_popup(self):
+        """Показывает всплывающее окно об успехе"""
+        popup = Popup(
+            title='Успех',
+            content=Label(text='Отчет успешно сгенерирован'),
+            size_hint=(None, None),
+            size=(300, 150)
+        )
+        popup.open()
+
+    def bind_navigation(self):
+        """
+        Настройка навигации по полям ввода.
+        Позволяет перемещаться между полями с помощью:
+        - Стрелок вверх/вниз
+        - Клавиши Enter
+        """
+        for i, field in enumerate(self.input_fields):
+            field.bind(
+                on_up=lambda x, idx=i: self.focus_previous_field(idx),
+                on_down=lambda x, idx=i: self.focus_next_field(idx),
+                on_text_validate=lambda x, idx=i: self.focus_next_field(idx)
+            )
+
 class ReportApp(App):
+    """Основной класс приложения"""
     def build(self):
+        # Устанавливаем размер окна
+        Window.size = (600, 800)  # Ширина: 800, Высота: 900
         return ReportGenerator()
 
 if __name__ == '__main__':
